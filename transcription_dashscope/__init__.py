@@ -1,4 +1,4 @@
-"""DashScope Fun-ASR-Realtime STT provider for Hermes (file transcription + live dictation).
+"""DashScope Qwen-Audio-ASR STT provider for Hermes (file transcription + live dictation).
 
 Selected with ``stt.provider: dashscope``; live partials need ``stt.streaming: true``.
 """

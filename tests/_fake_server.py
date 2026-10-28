@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import threading
-from typing import Any, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from websockets.sync.server import serve
 
-DEFAULT_SENTENCES: Sequence[Tuple[str, bool]] = (("你好", False), ("你好，世界。", True))
+DEFAULT_SENTENCES: Sequence[tuple[str, bool]] = (("你好", False), ("你好，世界。", True))
 
 
 class FakeFunAsrServer:
@@ -16,11 +17,11 @@ class FakeFunAsrServer:
 
     def __init__(
         self,
-        sentences: Sequence[Tuple[str, bool]] = DEFAULT_SENTENCES,
-        fail: Optional[str] = None,
+        sentences: Sequence[tuple[str, bool]] = DEFAULT_SENTENCES,
+        fail: str | None = None,
         heartbeat_first: bool = False,
-        mid_stream_interim: Optional[str] = None,
-        on_run_task: Optional[Any] = None,
+        mid_stream_interim: str | None = None,
+        on_run_task: Any | None = None,
     ) -> None:
         self.sentences = sentences
         self.fail = fail
@@ -28,10 +29,10 @@ class FakeFunAsrServer:
         self.mid_stream_interim = mid_stream_interim
         self.on_run_task = on_run_task
         self._interim_sent = False
-        self.received: List[Any] = []
+        self.received: list[Any] = []
         self._server: Any = None
 
-    def __enter__(self) -> "FakeFunAsrServer":
+    def __enter__(self) -> FakeFunAsrServer:
         self._server = serve(self._handle, "127.0.0.1", 0)
         threading.Thread(target=self._server.serve_forever, daemon=True).start()
         return self
@@ -50,7 +51,7 @@ class FakeFunAsrServer:
         return next(msg for msg in self.received if msg.get("header", {}).get("action") == "run-task")
 
     @property
-    def actions(self) -> List[str]:
+    def actions(self) -> list[str]:
         return [msg.get("header", {}).get("action") for msg in self.received if isinstance(msg, dict)]
 
     @property

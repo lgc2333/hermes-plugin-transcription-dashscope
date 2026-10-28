@@ -11,12 +11,20 @@ authors = [{ name = "LgCuwukii" }]
 # single place that declares them.
 dependencies = ["dashscope>=2,<3"]
 
+# Test tooling only; `pip install --group dev` (PEP 735) or `uv sync --group dev`.
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.9", "websockets>=13"]
+
 [tool.pytest.ini_options]
 # importlib mode: the plugin directory name is not a valid Python identifier
 # ("transcription-dashscope"), so prepend mode cannot import the package.
 addopts = "-q --import-mode=importlib"
 testpaths = ["tests"]
+pythonpath = ["tests"]
 
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

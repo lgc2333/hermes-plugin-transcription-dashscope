@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import importlib
-import os
 import subprocess
 import sys
 import time
@@ -49,7 +48,8 @@ def main() -> int:
     provider = provider_module.DashScopeProvider()
     print(f"provider={provider.name} model={provider.default_model()} available={provider.is_available()}", flush=True)
     if not provider.is_available():
-        print("no API key: set HERMES_CUSTOM_DASHSCOPE_API_KEY (or DASHSCOPE_API_KEY)", file=sys.stderr)
+        print("no API key: set TRANSCRIPTION_DASHSCOPE_API_KEY "
+              "(or HERMES_CUSTOM_DASHSCOPE_API_KEY / DASHSCOPE_API_KEY)", file=sys.stderr)
         return 2
 
     started = time.monotonic()

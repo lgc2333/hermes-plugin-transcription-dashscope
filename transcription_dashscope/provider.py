@@ -35,10 +35,16 @@ Configuration (all optional; the endpoint also reads an environment variable):
 
 ``base_url`` accepts the HTTP base and the SDK derives the task socket; a ``ws://``/``wss://`` URL
 is passed through as the socket URL instead. Precedence: ``stt.dashscope.base_url`` →
-``DASHSCOPE_STT_BASE_URL`` → ``HERMES_CUSTOM_DASHSCOPE_STT_BASE_URL`` → the default above.
+``TRANSCRIPTION_DASHSCOPE_BASE_URL`` → ``HERMES_CUSTOM_DASHSCOPE_BASE_URL`` → ``DASHSCOPE_BASE_URL``
+→ the default above.
 
-The API key comes from the environment only — ``HERMES_CUSTOM_DASHSCOPE_API_KEY``, falling back to
-``DASHSCOPE_API_KEY`` — so no secret ever lands in ``config.yaml``.
+The API key comes from the environment only — ``TRANSCRIPTION_DASHSCOPE_API_KEY`` →
+``HERMES_CUSTOM_DASHSCOPE_API_KEY`` → ``DASHSCOPE_API_KEY`` — so no secret ever lands in
+``config.yaml``.
+
+Every other key under ``stt.dashscope`` is a wire parameter and is forwarded verbatim, except the
+ones ``recognize()`` takes as named kwargs (``vocabulary_id``, ``disfluency_removal_enabled``, …),
+``format``/``sample_rate`` (fixed), and the plugin's own ``base_url``/``language``/``parameters``.
 """
 
 from __future__ import annotations
@@ -49,8 +55,9 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any
 
 from agent.transcription_provider import TranscriptionProvider, TranscriptionStreamSession
 
@@ -80,11 +87,11 @@ HOTWORD_WEIGHT = 5
 MAX_HOTWORDS = 50
 
 
-def _ok(transcript: str) -> Dict[str, Any]:
+def _ok(transcript: str) -> dict[str, Any]:
     return {"success": True, "transcript": transcript, "provider": PROVIDER_NAME}
 
 
-def _error(message: str) -> Dict[str, Any]:
+def _error(message: str) -> dict[str, Any]:
     return {"success": False, "transcript": "", "provider": PROVIDER_NAME, "error": message}
 
 
@@ -103,7 +110,7 @@ def _sdk():
     return dashscope
 
 
-def _env(name: str) -> Optional[str]:
+def _env(name: str) -> str | None:
     try:
         from hermes_cli.config import get_env_value
     except Exception:  # health: allow BLE001 -- fall back to the raw environment
@@ -113,7 +120,7 @@ def _env(name: str) -> Optional[str]:
     return get_env_value(name)
 
 
-def _api_key() -> Optional[str]:
+def _api_key() -> str | None:
     for name in API_KEY_ENVS:
         value = _env(name)
         if value and value.strip():
@@ -121,7 +128,7 @@ def _api_key() -> Optional[str]:
     return None
 
 
-def _section() -> Dict[str, Any]:
+def _section() -> dict[str, Any]:
     """``stt.dashscope``, falling back to ``stt.providers.dashscope`` when that is not a command."""
     try:
         from hermes_cli.config import load_config_readonly
@@ -140,8 +147,8 @@ def _section() -> Dict[str, Any]:
     return {}
 
 
-def _configured_base_url(section: Optional[Dict[str, Any]] = None) -> str:
-    """``stt.dashscope.base_url`` → ``DASHSCOPE_STT_BASE_URL`` → the default HTTP base."""
+def _configured_base_url(section: dict[str, Any] | None = None) -> str:
+    """``stt.dashscope.base_url`` → ``BASE_URL_ENVS`` → the default HTTP base."""
     section = _section() if section is None else section
     configured = str(section.get("base_url") or "").strip()
     if configured:
@@ -153,7 +160,7 @@ def _configured_base_url(section: Optional[Dict[str, Any]] = None) -> str:
     return DEFAULT_BASE_URL
 
 
-def _configured_workspace(section: Optional[Dict[str, Any]] = None) -> Optional[str]:
+def _configured_workspace(section: dict[str, Any] | None = None) -> str | None:
     """``stt.dashscope.workspace`` → ``DASHSCOPE_WORKSPACE`` → none (SDK's legacy fallback)."""
     section = _section() if section is None else section
     configured = str(section.get("workspace") or "").strip()
@@ -166,13 +173,13 @@ def _configured_workspace(section: Optional[Dict[str, Any]] = None) -> Optional[
     return None
 
 
-def _ws_override(base_url: str) -> Optional[str]:
+def _ws_override(base_url: str) -> str | None:
     """A raw socket URL is handed to the API as ``ws_url``; an HTTP base lets the SDK derive it."""
     url = (base_url or "").strip()
     return url if url.startswith(("ws://", "wss://")) else None
 
 
-def _config_number(section: Dict[str, Any], key: str, default: float) -> float:
+def _config_number(section: dict[str, Any], key: str, default: float) -> float:
     try:
         value = float(section.get(key))
     except (TypeError, ValueError):
@@ -180,7 +187,7 @@ def _config_number(section: Dict[str, Any], key: str, default: float) -> float:
     return value if value > 0 else default
 
 
-def _primary_subtag(language: Optional[str]) -> Optional[str]:
+def _primary_subtag(language: str | None) -> str | None:
     """``zh-CN``/``zh_CN`` -> ``zh``; the API takes bare language codes."""
     if not language:
         return None
@@ -188,7 +195,7 @@ def _primary_subtag(language: Optional[str]) -> Optional[str]:
     return code or None
 
 
-def _join_sentences(sentences: List[str]) -> str:
+def _join_sentences(sentences: list[str]) -> str:
     """Join finalized sentences without gluing English words together."""
     out = ""
     for text in sentences:
@@ -201,7 +208,7 @@ def _join_sentences(sentences: List[str]) -> str:
     return out.strip()
 
 
-def _hotwords(prompt: Optional[str]) -> Dict[str, int]:
+def _hotwords(prompt: str | None) -> dict[str, int]:
     """Hermes' ``prompt`` is a vocabulary hint; the wire calls that ``vocabulary`` (即时热词)."""
     words = [w for w in str(prompt or "").replace(",", " ").replace("，", " ").split() if w]
     return {word: HOTWORD_WEIGHT for word in list(dict.fromkeys(words))[:MAX_HOTWORDS]}
@@ -219,11 +226,11 @@ RESERVED_CONFIG_KEYS = frozenset({
 })
 
 
-def _parameters(language: Optional[str], prompt: Optional[str], *, live: bool,
-                section: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _parameters(language: str | None, prompt: str | None, *, live: bool,
+                section: dict[str, Any] | None = None) -> dict[str, Any]:
     """Our defaults (language, prompt, partials, heartbeat) overlaid by the section's own keys."""
     section = section or {}
-    parameters: Dict[str, Any] = {"heartbeat": True}
+    parameters: dict[str, Any] = {"heartbeat": True}
     hint = _primary_subtag(language)
     if hint:
         parameters["language_hints"] = [hint]
@@ -239,10 +246,10 @@ def _parameters(language: Optional[str], prompt: Optional[str], *, live: bool,
     return parameters
 
 
-def _api_kwargs(section: Dict[str, Any], *, model: str, timeout: float,
-                ws_url: Optional[str]) -> Dict[str, Any]:
+def _api_kwargs(section: dict[str, Any], *, model: str, timeout: float,
+                ws_url: str | None) -> dict[str, Any]:
     """Section keys the SDK takes as named kwargs, plus the resolved model/timeout/socket."""
-    kwargs: Dict[str, Any] = {"model": model, "timeout": timeout}
+    kwargs: dict[str, Any] = {"model": model, "timeout": timeout}
     for key in NAMED_API_KWARGS:
         if key in ("model", "timeout") or key not in section:
             continue
@@ -257,11 +264,11 @@ class _Collector:
     """Sentence assembly for one task, fed by the SDK's event stream."""
 
     def __init__(self) -> None:
-        self.sentences: List[str] = []
+        self.sentences: list[str] = []
         self.interim = ""
-        self.failure: Optional[str] = None
+        self.failure: str | None = None
 
-    def absorb(self, event: Dict[str, Any]) -> None:
+    def absorb(self, event: dict[str, Any]) -> None:
         payload = event.get("payload") or {}
         header = event.get("header") or {}
         if str(header.get("event") or "") == "task-failed":
@@ -287,7 +294,7 @@ class _Collector:
     def text(self) -> str:
         return _join_sentences([*self.sentences, self.interim])
 
-    def result(self, *, sent_audio: bool) -> Dict[str, Any]:
+    def result(self, *, sent_audio: bool) -> dict[str, Any]:
         if self.failure:
             return _error(self.failure)
         if not sent_audio:
@@ -299,7 +306,7 @@ class _Client:
     """A ``dashscope.Client`` built per call, so key and endpoint stay call-scoped."""
 
     def __init__(self, api_key: str, base_url: str, timeout: float,
-                 workspace: Optional[str] = None) -> None:
+                 workspace: str | None = None) -> None:
         sdk = _sdk()
         if sdk is None:
             raise RuntimeError(
@@ -310,7 +317,7 @@ class _Client:
         http_base = (base_url or "").strip()
         if not http_base.startswith(("http://", "https://")):
             http_base = DEFAULT_BASE_URL
-        kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": http_base, "timeout": timeout}
+        kwargs: dict[str, Any] = {"api_key": api_key, "base_url": http_base, "timeout": timeout}
         if workspace:
             kwargs["workspace"] = workspace
         self.client = sdk.Client(**kwargs)
@@ -325,12 +332,12 @@ class DashScopeStreamSession(TranscriptionStreamSession):
         self._rec = recognizer
         self._collector = collector
         self._finalize_timeout = finalize_timeout
-        self._audio: "queue.Queue[Optional[bytes]]" = queue.Queue()
+        self._audio: queue.Queue[bytes | None] = queue.Queue()
         self._sent = threading.Event()      # the reader saw task-finished
         self._closed = threading.Event()    # both workers are done
         self._cancelled = threading.Event()
         self._done = threading.Event()
-        self._result: Dict[str, Any] = _error("live transcription did not finish")
+        self._result: dict[str, Any] = _error("live transcription did not finish")
         self._audio_bytes = 0
         self._lock = threading.Lock()
         threading.Thread(target=self._read_events, name="stt-dashscope-events", daemon=True).start()
@@ -342,7 +349,7 @@ class DashScopeStreamSession(TranscriptionStreamSession):
             self._audio.put(bytes(chunk))  # unbounded: a put here cannot block the caller
 
     # ── caller API (blocking, used from an executor) ──
-    def finalize(self) -> Dict[str, Any]:
+    def finalize(self) -> dict[str, Any]:
         self._audio.put(None)
         self._sent.wait(self._finalize_timeout)
         self._closed.wait(self._finalize_timeout)
@@ -360,7 +367,7 @@ class DashScopeStreamSession(TranscriptionStreamSession):
         self._finish(_error("cancelled"))
 
     # ── workers ──
-    def _finish(self, result: Dict[str, Any]) -> None:
+    def _finish(self, result: dict[str, Any]) -> None:
         if not self._done.is_set():
             self._result = result
             self._done.set()
@@ -418,7 +425,7 @@ class DashScopeProvider(TranscriptionProvider):
     def is_available(self) -> bool:
         return _sdk() is not None and _api_key() is not None
 
-    def get_setup_schema(self) -> Dict[str, Any]:
+    def get_setup_schema(self) -> dict[str, Any]:
         return {
             "name": self.display_name,
             "badge": "cn",
@@ -436,9 +443,9 @@ class DashScopeProvider(TranscriptionProvider):
 
     # ── file path (blocking; Hermes calls it in a worker) ──
     def transcribe(
-        self, file_path: str, *, model: Optional[str] = None, language: Optional[str] = None,
+        self, file_path: str, *, model: str | None = None, language: str | None = None,
         **extra: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if _sdk() is None:
             return _error("DashScope SDK is not importable in this process — install it with `hermes "
                           "plugins enable transcription-dashscope` and restart the gateway")
@@ -466,7 +473,7 @@ class DashScopeProvider(TranscriptionProvider):
             _to_wav(str(audio), wav, ffmpeg)
             wiring = _Client(api_key, _configured_base_url(section), timeout,
                              _configured_workspace(section))
-            events: Iterator[Dict[str, Any]] = wiring.client.audio.asr.recognize_file(
+            events: Iterator[dict[str, Any]] = wiring.client.audio.asr.recognize_file(
                 wav,
                 format="wav",
                 sample_rate=SAMPLE_RATE,
@@ -487,7 +494,7 @@ class DashScopeProvider(TranscriptionProvider):
 
     # ── live path (blocking open; frames are queued afterwards) ──
     def open_stream_session(
-        self, *, language: Optional[str] = None, prompt: Optional[str] = None,
+        self, *, language: str | None = None, prompt: str | None = None,
     ) -> TranscriptionStreamSession:
         api_key = _api_key()
         if api_key is None:

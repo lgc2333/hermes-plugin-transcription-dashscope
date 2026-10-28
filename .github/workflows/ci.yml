@@ -37,7 +37,9 @@ jobs:
     env:
       # The provider subclasses agent.transcription_provider, so the tests need Hermes' sources.
       HERMES_INSTALL_DIR: ${{ github.workspace }}/.hermes
-      HERMES_REF: v2026.9.24
+      # Pinned to the release that exports TranscriptionStreamSession (the live-dictation ABC);
+      # older tags satisfy the file-API only.
+      HERMES_REF: v0.22.5
     steps:
       - uses: actions/checkout@v4
       - name: Fetch Hermes sources

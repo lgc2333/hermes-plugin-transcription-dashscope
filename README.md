@@ -1,14 +1,18 @@
 # transcription-dashscope
 
+[English](README.en.md)
+
 给 Hermes 加语音识别，收到语音消息时自动转成文字，桌面或 CLI 听写时边说边出字。识别走千问AI平台（原阿里云百炼，DashScope）的 Qwen-Audio-ASR，默认模型 `qwen-audio-3.1-asr-flash-message`。
 
 ## 准备
 
-一个千问AI平台的 API Key，写进 `.env`（也认 `DASHSCOPE_API_KEY`）：
+一个千问AI平台的 API Key，写进 `.env`：
 
 ```bash
-HERMES_CUSTOM_DASHSCOPE_API_KEY=sk-xxx
+DASHSCOPE_API_KEY=sk-xxx
 ```
+
+也认 `HERMES_CUSTOM_DASHSCOPE_API_KEY` 和 `TRANSCRIPTION_DASHSCOPE_API_KEY`。
 
 系统里要有 `ffmpeg`，插件用它把各种录音格式统一成 16 kHz 单声道再送去识别。
 
@@ -51,6 +55,10 @@ hermes config set stt.dashscope.vad_model near_meeting_16k
 ```
 
 还能用 `keep_dialect`（保留方言原文）、`speech_noise_threshold`（语音/噪音阈值）、`vocabulary_id`（预编译热词）、`language_hints`（语种，最多 4 个）；冷门参数可以用 `parameters` 整体塞一个字典。
+
+## 数据
+
+音频和 API Key 发到你配置的端点，别的都不发。
 
 ## 还原
 

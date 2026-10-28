@@ -4,10 +4,8 @@ kind: standalone
 version: 0.1.0
 author: LgCuwukii
 description: >
-  Speech-to-text plugin for Hermes: registers the `dashscope` STT provider, which turns voice
-  messages into text and transcribes live dictation as you speak. Uses Qwen AI Platform (formerly
-  Alibaba Cloud Model Studio, DashScope); default model qwen-audio-3.1-asr-flash-message, and it
-  needs an API key from there.
+  Speech-to-text for Hermes via DashScope (Qwen) — voice messages and live dictation.
+  Needs a Qwen AI Platform API key.
 requires_hermes: ">=0.22.5"
 optional_env:
   - name: TRANSCRIPTION_DASHSCOPE_API_KEY

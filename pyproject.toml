@@ -1,0 +1,22 @@
+[project]
+name = "hermes-transcription-dashscope"
+version = "0.1.0"
+description = "Hermes STT directory plugin: DashScope Qwen-Audio-ASR (file + live streaming)"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = "MIT"
+authors = [{ name = "LgCuwukii" }]
+# Prepared by Hermes' PM layer when the plugin is enabled (`hermes plugins enable`).
+# A pyproject `project.dependencies` list wins over plugin.yaml pip_dependencies, so this is the
+# single place that declares them.
+dependencies = ["dashscope>=2,<3"]
+
+[tool.pytest.ini_options]
+# importlib mode: the plugin directory name is not a valid Python identifier
+# ("transcription-dashscope"), so prepend mode cannot import the package.
+addopts = "-q --import-mode=importlib"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

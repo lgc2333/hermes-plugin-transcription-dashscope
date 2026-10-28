@@ -1,0 +1,30 @@
+name: transcription-dashscope
+label: DashScope Qwen-Audio-ASR (STT)
+kind: standalone
+version: 0.1.0
+author: LgCuwukii
+description: >
+  Speech-to-text plugin for Hermes: registers the `dashscope` STT provider, which turns voice
+  messages into text and transcribes live dictation as you speak. Uses Qwen AI Platform (formerly
+  Alibaba Cloud Model Studio, DashScope); default model qwen-audio-3.1-asr-flash-message, and it
+  needs an API key from there.
+requires_hermes: ">=0.22.5"
+optional_env:
+  - name: TRANSCRIPTION_DASHSCOPE_API_KEY
+    description: >
+      Qwen AI Platform (DashScope) API key. Also accepts HERMES_CUSTOM_DASHSCOPE_API_KEY (a custom provider
+      entry) or DASHSCOPE_API_KEY (the built-in DashScope provider).
+    prompt: "Qwen AI Platform API key"
+    url: "https://bailian.console.aliyun.com/"
+    password: true
+  - name: TRANSCRIPTION_DASHSCOPE_BASE_URL
+    description: >
+      Speech recognition endpoint. Also accepts HERMES_CUSTOM_DASHSCOPE_BASE_URL (a custom
+      provider entry) or DASHSCOPE_BASE_URL (the built-in provider); defaults to
+      https://maas.qianwenaiapi.com/api/v1.
+    prompt: "Speech recognition base URL"
+    password: false
+  - name: TRANSCRIPTION_DASHSCOPE_WORKSPACE
+    description: Workspace ID; set it to use the workspace-scoped gateway instead of the shared one.
+    prompt: "DashScope workspace ID"
+    password: false
